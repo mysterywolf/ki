@@ -1,6 +1,6 @@
-all: kilo
+all: ki
 
-kilo: kilo.c
+ki: ki.c
 	$(CC) -o ki ki.c -Wall -W -pedantic -std=c99
 
 clean:
