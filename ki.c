@@ -60,9 +60,14 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <fcntl.h>
+#include <stdlib.h>
 
 #ifndef __linux__
 #include "getline.h"
+#else
+#include <sys/ioctl.h>
+#include <signal.h>
+#define ENABLE_FEATURE_KILO_USE_SIGNALS
 #endif
 
 
