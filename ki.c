@@ -66,7 +66,7 @@
 #else
 #include <sys/ioctl.h>
 #include <signal.h>
-#define ENABLE_FEATURE_KILO_USE_SIGNALS
+//#define ENABLE_FEATURE_KILO_USE_SIGNALS
 #endif
 
 
@@ -1086,7 +1086,7 @@ static void editorFind(int fd) {
         if (c == DEL_KEY || c == CTRL_H || c == BACKSPACE) {
             if (qlen != 0) query[--qlen] = '\0';
             last_match = -1;
-        } else if (c == ESC || c == ENTER) { /*TODO:È·ÈÏÊÇÓÉÓÚESCÃ»ÓĞ³É¹¦Ê¶±ğµ¼ÖÂ¼üÈëESCºó¼ÙËÀ*/
+        } else if (c == ESC || c == ENTER) { /*TODO:ç¡®è®¤æ˜¯ç”±äºESCæ²¡æœ‰æˆåŠŸè¯†åˆ«å¯¼è‡´é”®å…¥ESCåå‡æ­»*/
             if(c == ESC){
                 E.cx = saved_cx; E.cy = saved_cy;
                 E.coloff = saved_coloff; E.rowoff = saved_rowoff;
