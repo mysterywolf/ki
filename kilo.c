@@ -1,4 +1,8 @@
 /*
+ * ki -- A very simple editor in less than 1-kilo lines of code (as counted
+ *         by "cloc"). Does not depend on libcurses, directly emits VT100
+ *         escapes on the terminal.
+ *
  * Meoc Man @ RT-Thread community
  * 
  * Change Logs:
@@ -8,11 +12,6 @@
  * 2020-09-03    Meco Man    PR #40 fix memory leak
  * 2020-09-03    Meco Man    IS #38 support Python Javascript Go language highlight
  *                                  https://github.com/practicalswift/openemacs
- */
-/* Kilo -- A very simple editor in less than 1-kilo lines of code (as counted
- *         by "cloc"). Does not depend on libcurses, directly emits VT100
- *         escapes on the terminal.
- *
  * -----------------------------------------------------------------------
  *
  * Copyright (C) 2016 Salvatore Sanfilippo <antirez at gmail dot com>
@@ -1356,7 +1355,7 @@ static void initEditor(void) {
 }
 
 /* main */
-int kilo_main(int argc, char **argv) {
+int ki_main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr,"Usage: kilo <filename>\n");
         return 0;
@@ -1374,7 +1373,7 @@ int kilo_main(int argc, char **argv) {
     
     while(1) {
         editorRefreshScreen();
-        if(editorProcessKeypress(STDIN_FILENO) == 0){/* quit ? */
+        if(editorProcessKeypress(STDIN_FILENO) == 0){ /* quit ? */
             break;
         }   
     }
@@ -1384,12 +1383,12 @@ int kilo_main(int argc, char **argv) {
 #ifndef MSH_CMD_EXPORT_ALIAS
 #define MSH_CMD_EXPORT_ALIAS(command, alias, desc)
 #else
-MSH_CMD_EXPORT_ALIAS(kilo_main, kilo, a small text editor);
+MSH_CMD_EXPORT_ALIAS(ki_main, ki, a small text editor with syntax highlight and search);
 #endif
 
 #ifdef __linux__
 int main (int argc, char **argv)
 {
-    return kilo_main(argc,argv);
+    return ki_main(argc,argv);
 }
 #endif

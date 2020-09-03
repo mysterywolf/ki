@@ -1,29 +1,19 @@
-Kilo for RT-Thread
+Ki
 ===
 
-Kilo is a small text editor in less than 1K lines of code (counted with cloc).
+Ki is a small text editor in less than 1K lines of code (counted with cloc).
 
-A screencast is available here: https://asciinema.org/a/90r2i9bq8po03nazhqtsifksb
+ki是一个带有语法高亮的终端编辑器，支持C/C++ Python Javascript Go语言语法高亮
 
-Usage: kilo `<filename>`
+A screencast is available here/演示视频: https://asciinema.org/a/90r2i9bq8po03nazhqtsifksb
 
-Keys:
+Usage/使用方法 : ki `<filename>`
+
+Keys/快捷键 :
 
     CTRL-S: Save
     CTRL-Q: Quit
-    CTRL-F: Find string in file (ESC to exit search, arrows/enter/TAB to navigate)
-
-Kilo does not depend on any library (not even curses). It uses fairly standard
-VT100 (and similar terminals) escape sequences. The project is in alpha
-stage and was written in just a few hours taking code from my other two
-projects, load81 and linenoise.
-
-People are encouraged to use it as a starting point to write other editors
-or command line interfaces that are more advanced than the usual REPL
-style CLI.
-
-Kilo was written by Salvatore Sanfilippo aka antirez and is released
-under the BSD 2 clause license.
+    CTRL-F: Find string in file (Enter to exit search, arrows/TAB to navigate)
 
 
 
