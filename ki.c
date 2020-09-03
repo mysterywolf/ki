@@ -63,12 +63,7 @@
 
 #ifndef __linux__
 #include "getline.h"
-#else
-#include <sys/ioctl.h>
-#include <signal.h>
-//#define ENABLE_FEATURE_KILO_USE_SIGNALS
 #endif
-
 
 
 /* Syntax highlight types */
@@ -1380,9 +1375,7 @@ int ki_main(int argc, char **argv) {
     
     return 0;
 }
-#ifndef MSH_CMD_EXPORT_ALIAS
-#define MSH_CMD_EXPORT_ALIAS(command, alias, desc)
-#else
+#ifdef MSH_CMD_EXPORT_ALIAS
 MSH_CMD_EXPORT_ALIAS(ki_main, ki, a small text editor with syntax highlight and search);
 #endif
 
