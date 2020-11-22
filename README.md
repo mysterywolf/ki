@@ -21,7 +21,7 @@ Keys/快捷键 :
 
 原项目：https://github.com/antirez/kilo
 
-由于原作者对待这个软件的维护上非常的”哏“，很多开源社区朋友给他提PR和issue看都不看理都不理，无奈有很多人选择fork一份另起炉灶单独维护，比较出名的有：https://github.com/practicalswift/openemacs
+https://github.com/practicalswift/openemacs
 
 我的项目是综合了开源社区朋友给他提的PR和issue基础上，以及其他人fork的版本基础上，综合而成的。
 
