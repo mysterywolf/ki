@@ -42,7 +42,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define KILO_VERSION "0.1.0"
+#define KILO_VERSION "0.2.0"
 
 #ifdef __linux__
 #define _POSIX_C_SOURCE 200809L
@@ -62,9 +62,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 
-#ifndef __linux__
-#include "getline.h"
-#else
+#ifdef __linux__
 #include <sys/ioctl.h>
 #include <signal.h>
 #define ENABLE_FEATURE_KILO_USE_SIGNALS
