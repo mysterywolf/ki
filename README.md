@@ -25,7 +25,7 @@ https://github.com/practicalswift/openemacs
 
 我的项目是综合了开源社区朋友给他提的PR和issue基础上，以及其他人fork的版本基础上，综合而成的。
 
-
+目前已知问题：内存泄漏
 
 ## 维护&联系
 
