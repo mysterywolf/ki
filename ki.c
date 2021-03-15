@@ -4,7 +4,7 @@
  *         escapes on the terminal.
  *
  * Meoc Man @ RT-Thread community
- * 
+ *
  * Change Logs:
  * 2020-09-01    Meco Man    First Version
  * 2020-09-02    Meco Man    PR #62 add clear screen functionality
@@ -517,7 +517,7 @@ static void editorUpdateSyntax(erow *row) {
         if (is_separator(*p)) {
             row->hl[i] = HL_KEYWORD1;
         }
-	    
+
         /* Handle keywords and lib calls */
         if (prev_sep) {
             int j;
@@ -546,7 +546,7 @@ static void editorUpdateSyntax(erow *row) {
         prev_sep = is_separator(*p);
         p++; i++;
     }
-    
+
     /* Propagate syntax change to the next row if the open commen
      * state changed. This may recursively affect all the following rows
      * in the file. */
@@ -1259,7 +1259,7 @@ static unsigned int editorProcessKeypress(int fd) {
             }
         }
         clearScreen();
-       return 0;   
+       return 0;
     case CTRL_S:        /* Ctrl-s */
         editorSave();
         break;
@@ -1364,18 +1364,18 @@ int ki_main(int argc, char **argv) {
     if(editorOpen(argv[1])){
         return 0;
     }
-        
+
     clearScreen();
     enableRawMode(STDIN_FILENO);
     editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find");
-    
+
     while(1) {
         editorRefreshScreen();
         if(editorProcessKeypress(STDIN_FILENO) == 0){ /* quit ? */
             break;
-        }   
+        }
     }
-    
+
     return 0;
 }
 #ifdef MSH_CMD_EXPORT_ALIAS
