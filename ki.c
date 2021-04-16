@@ -7,11 +7,10 @@
  *
  * Change Logs:
  * 2020-09-01    Meco Man    First Version
- * 2020-09-02    Meco Man    PR #62 add clear screen functionality
  *                           PR #19 highlight separators
  * 2020-09-03    Meco Man    PR #40 fix memory leak
- * 2020-09-03    Meco Man    IS #38 support Python Javascript Go language highlight
- *                                  https://github.com/practicalswift/openemacs
+ * 2021-04-16    Meco Man    clear and restore screen when exit ki
+ *                           add sandbox to prevent from leaking memory
  * -----------------------------------------------------------------------
  *
  * Copyright (C) 2016 Salvatore Sanfilippo <antirez at gmail dot com>
@@ -42,11 +41,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define KILO_VERSION "0.2.0"
-
-#ifdef __linux__
-#define _POSIX_C_SOURCE 200809L
-#endif
+#define KILO_VERSION "0.0.1"
 
 #include <termios.h>
 #include <stdio.h>
@@ -56,18 +51,13 @@
 #include <ctype.h>
 #include <time.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <stdarg.h>
 #include <fcntl.h>
-#include <stdlib.h>
 
-#ifdef __linux__
-#include <sys/ioctl.h>
-#include <signal.h>
-#define ENABLE_FEATURE_KILO_USE_SIGNALS
-#endif
-
+#include <mem_sandbox.h>
 
 /* Syntax highlight types */
 #define HL_NORMAL 0
@@ -84,8 +74,8 @@
 #define HL_HIGHLIGHT_NUMBERS (1<<1)
 
 struct editorSyntax {
-    char **filematch;
-    char **keywords;
+    const char **filematch;
+    const char **keywords;
     char singleline_comment_start[2];
     char multiline_comment_start[3];
     char multiline_comment_end[3];
@@ -127,31 +117,67 @@ struct editorConfig {
 static struct editorConfig E;
 
 enum KEY_ACTION{
-        KEY_NULL = 0,       /* NULL */
-        CTRL_C = 3,         /* Ctrl-c */
-        CTRL_D = 4,         /* Ctrl-d */
-        CTRL_F = 6,         /* Ctrl-f */
-        CTRL_H = 8,         /* Ctrl-h */
-        TAB = 9,            /* Tab */
-        CTRL_L = 12,        /* Ctrl+l */
-        ENTER = 13,         /* Enter */
-        CTRL_Q = 17,        /* Ctrl-q */
-        CTRL_S = 19,        /* Ctrl-s */
-        CTRL_U = 21,        /* Ctrl-u */
-        ESC = 27,           /* Escape */
-        BACKSPACE =  127,   /* Backspace */
-        /* The following are just soft codes, not really reported by the
-         * terminal directly. */
-        ARROW_LEFT = 1000,
-        ARROW_RIGHT,
-        ARROW_UP,
-        ARROW_DOWN,
-        DEL_KEY,
-        HOME_KEY,
-        END_KEY,
-        PAGE_UP,
-        PAGE_DOWN
+    KEY_NULL = 0,       /* NULL */
+    CTRL_C = 3,         /* Ctrl-c */
+    CTRL_D = 4,         /* Ctrl-d */
+    CTRL_F = 6,         /* Ctrl-f */
+    CTRL_H = 8,         /* Ctrl-h */
+    TAB = 9,            /* Tab */
+    CTRL_L = 12,        /* Ctrl+l */
+    ENTER = 13,         /* Enter */
+    CTRL_Q = 17,        /* Ctrl-q */
+    CTRL_S = 19,        /* Ctrl-s */
+    CTRL_U = 21,        /* Ctrl-u */
+    ESC = 27,           /* Escape */
+    BACKSPACE =  127,   /* Backspace */
+    /* The following are just soft codes, not really reported by the
+     * terminal directly. */
+    ARROW_LEFT = 1000,
+    ARROW_RIGHT,
+    ARROW_UP,
+    ARROW_DOWN,
+    DEL_KEY,
+    HOME_KEY,
+    END_KEY,
+    PAGE_UP,
+    PAGE_DOWN
 };
+
+static mem_sandbox_t vi_sandbox = RT_NULL;
+
+static unsigned char ki_mem_init(void)
+{
+    vi_sandbox = mem_sandbox_create(1024 *10); /* sandbox size is 10KB */
+    if(vi_sandbox == RT_NULL)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+static void ki_mem_release(void)
+{
+    mem_sandbox_delete(vi_sandbox);
+}
+
+static void *ki_malloc(rt_size_t size)
+{
+    return mem_sandbox_malloc(vi_sandbox, size);
+}
+
+static void *ki_realloc(void *rmem, rt_size_t newsize)
+{
+    return mem_sandbox_realloc(vi_sandbox, rmem, newsize);
+}
+
+static void ki_free(void *ptr)
+{
+    mem_sandbox_free(vi_sandbox, ptr);
+}
+
 
 static void editorSetStatusMessage(const char *fmt, ...);
 
@@ -177,58 +203,40 @@ static void editorSetStatusMessage(const char *fmt, ...);
  * There is no support to highlight patterns currently. */
 
 /* C / C++ */
-// C/C++ ("class" being C++ only)
-char *C_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS[] = { ".c", ".cc", ".cpp", ".h", ".hpp", NULL };
-char *C_SYNTAX_HIGHLIGHT_KEYWORDS[] = {
-    // C/C++ keywords
-    "auto", "break", "case", "class", "const", "continue", "default", "do", "else", "enum", "extern", "for", "goto", "if", "register", "return", "sizeof", "static", "struct", "switch", "typedef", "union", "volatile", "while",
-    // C types
-    "bool|", "char|", "double|", "float|", "int|", "long|", "short|", "signed|", "unsigned|", "void|",
-    // C preprocessor directives
-    "#define|", "#endif|", "#error|", "#if|", "#ifdef|", "#ifndef|", "#include|", "#undef|", NULL
+static const char *C_HL_extensions[] = {".c",".h",".cpp",".hpp",".cc",NULL};
+static const char *C_HL_keywords[] = {
+    /* C Keywords */
+    "auto","break","case","continue","default","do","else","enum",
+    "extern","for","goto","if","register","return","sizeof","static",
+    "struct","switch","typedef","union","volatile","while","NULL",
+
+    /* C++ Keywords */
+    "alignas","alignof","and","and_eq","asm","bitand","bitor","class",
+    "compl","constexpr","const_cast","deltype","delete","dynamic_cast",
+    "explicit","export","false","friend","inline","mutable","namespace",
+    "new","noexcept","not","not_eq","nullptr","operator","or","or_eq",
+    "private","protected","public","reinterpret_cast","static_assert",
+    "static_cast","template","this","thread_local","throw","true","try",
+    "typeid","typename","virtual","xor","xor_eq",
+
+    /* C types */
+        "int|","long|","double|","float|","char|","unsigned|","signed|",
+        "void|","short|","auto|","const|","bool|",NULL
 };
 
-// Go
-char *GO_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS[] = { ".go", NULL };
-char *GO_SYNTAX_HIGHLIGHT_KEYWORDS[] = {
-    // Go keywords
-    "if", "for", "range", "while", "defer", "switch", "case", "else", "func", "package", "import", "type", "struct", "import", "const", "var",
-    // Go types
-    "nil|", "true|", "false|", "error|", "err|", "int|", "int32|", "int64|", "uint|", "uint32|", "uint64|", "string|", "bool|", NULL
+/* Here we define an array of syntax highlights by extensions, keywords,
+ * comments delimiters and flags. */
+struct editorSyntax HLDB[] = {
+    {
+        /* C / C++ */
+        C_HL_extensions,
+        C_HL_keywords,
+        "//","/*","*/",
+        HL_HIGHLIGHT_STRINGS | HL_HIGHLIGHT_NUMBERS
+    }
 };
 
-// Python
-char *PYTHON_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS[] = { ".py",".pyw", NULL };
-char *PYTHON_SYNTAX_HIGHLIGHT_KEYWORDS[] = {
-    // Python keywords and built-in functions
-    "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", "else", "except", "exec", "finally", "for", "from", "global",
-    "if", "import", "in", "is", "lambda", "not", "or", "pass", "print", "raise", "return", "try", "while", "with", "yield", "async", "await",
-    "nonlocal", "range", "xrange", "reduce", "map", "filter", "all", "any", "sum", "dir", "abs", "breakpoint", "compile", "delattr", "divmod",
-    "format", "eval", "getattr", "hasattr", "hash", "help", "id", "input", "isinstance", "issubclass", "len", "locals", "max", "min", "next",
-    "open", "pow", "repr", "reversed", "round", "setattr", "slice", "sorted", "super", "vars", "zip", "__import__", "reload", "raw_input",
-    "execfile", "file", "cmp", "basestring",
-    // Python types
-    "buffer|", "bytearray|", "bytes|", "complex|", "float|", "frozenset|", "int|", "list|", "long|", "None|", "set|", "str|", "chr|", "tuple|",
-    "bool|", "False|", "True|", "type|", "unicode|", "dict|", "ascii|", "bin|", "callable|", "classmethod|", "enumerate|", "hex|", "oct|", "ord|",
-    "iter|", "memoryview|", "object|", "property|", "staticmethod|", "unichr|", NULL
-};
-
-// JavaScript
-char *JAVASCRIPT_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS[] = { ".js", ".jsx", NULL };
-char *JAVASCRIPT_SYNTAX_HIGHLIGHT_KEYWORDS[] = {
-    // JavaScript keywords
-    "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "enum", "export", "extends", "finally", "for", "function", "if", "implements", "import", "in", "instanceof", "interface", "let", "new", "package", "private", "protected", "public", "return", "static", "super", "switch", "this", "throw", "try", "typeof", "var", "void", "while", "with", "yield", "true", "false", "null", "NaN", "global", "window", "prototype", "constructor", "document", "isNaN", "arguments", "undefined",
-    // JavaScript primitives
-    "Infinity|", "Array|", "Object|", "Number|", "String|", "Boolean|", "Function|", "ArrayBuffer|", "DataView|", "Float32Array|", "Float64Array|", "Int8Array|", "Int16Array|", "Int32Array|", "Uint8Array|", "Uint8ClampedArray|", "Uint32Array|", "Date|", "Error|", "Map|", "RegExp|", "Symbol|", "WeakMap|", "WeakSet|", "Set|", NULL
-};
-
-struct editorSyntax SYNTAX_HIGHLIGHT_DATABASE[] = {
-    { .filematch = C_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS, .keywords = C_SYNTAX_HIGHLIGHT_KEYWORDS, .singleline_comment_start = "//", .multiline_comment_start = "/*", .multiline_comment_end = "*/" },
-    { .filematch = PYTHON_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS, .keywords = PYTHON_SYNTAX_HIGHLIGHT_KEYWORDS, .singleline_comment_start = "# ", .multiline_comment_start = "'''", .multiline_comment_end = "'''" },
-    { .filematch = GO_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS, .keywords = GO_SYNTAX_HIGHLIGHT_KEYWORDS, .singleline_comment_start = "//", .multiline_comment_start = "/*", .multiline_comment_end = "*/" },
-    { .filematch = JAVASCRIPT_SYNTAX_HIGHLIGHT_FILE_EXTENSIONS, .keywords = JAVASCRIPT_SYNTAX_HIGHLIGHT_KEYWORDS, .singleline_comment_start = "//", .multiline_comment_start = "/*", .multiline_comment_end = "*/" }
-};
-
+#define HLDB_ENTRIES (sizeof(HLDB)/sizeof(HLDB[0]))
 
 /* ======================= Low level terminal handling ====================== */
 
@@ -287,8 +295,10 @@ static int editorReadKey(int fd) {
     int nread;
     char c, seq[3];
     while ((nread = read(fd,&c,1)) == 0);
-    if (nread == -1){
-        exit(1);
+    if (nread == -1)
+    {
+        //exit(1);
+        return -1;
     }
 
     while(1) {
@@ -336,7 +346,6 @@ static int editorReadKey(int fd) {
     }
 }
 
-#ifdef ENABLE_FEATURE_KILO_USE_SIGNALS
 /* Use the ESC [6n escape sequence to query the horizontal cursor position
  * and return it. On error -1 is returned, on success the position of the
  * cursor is stored at *rows and *cols and 0 is returned. */
@@ -396,11 +405,11 @@ static int getWindowSize(int ifd, int ofd, int *rows, int *cols) {
 failed:
     return -1;
 }
-#endif
 
 /* ====================== Syntax highlight color scheme  ==================== */
+
 static int is_separator(int c) {
-    return c == '\0' || isspace(c) || strchr("{},.()+-/*=~%[];<>|&^",c) != NULL;
+    return c == '\0' || isspace(c) || strchr("{},.()+-/*=~%[];<>|&",c) != NULL;
 }
 
 /* Return true if the specified row last char is part of a multi line comment
@@ -416,14 +425,14 @@ static int editorRowHasOpenComment(erow *row) {
 /* Set every byte of row->hl (that corresponds to every character in the line)
  * to the right syntax highlight type (HL_* defines). */
 static void editorUpdateSyntax(erow *row) {
-    row->hl = realloc(row->hl,row->rsize);
+    row->hl = ki_realloc(row->hl,row->rsize);
     memset(row->hl,HL_NORMAL,row->rsize);
 
     if (E.syntax == NULL) return; /* No syntax, everything is HL_NORMAL. */
 
     int i, prev_sep, in_string, in_comment;
     char *p;
-    char **keywords = E.syntax->keywords;
+    const char **keywords = E.syntax->keywords;
     char *scs = E.syntax->singleline_comment_start;
     char *mcs = E.syntax->multiline_comment_start;
     char *mce = E.syntax->multiline_comment_end;
@@ -466,7 +475,7 @@ static void editorUpdateSyntax(erow *row) {
                 p++; i++;
                 continue;
             }
-        } else if (!in_string && *p == mcs[0] && *(p+1) == mcs[1]) {
+        } else if (*p == mcs[0] && *(p+1) == mcs[1]) {
             row->hl[i] = HL_MLCOMMENT;
             row->hl[i+1] = HL_MLCOMMENT;
             p += 2; i += 2;
@@ -559,38 +568,35 @@ static void editorUpdateSyntax(erow *row) {
 /* Maps syntax highlight token types to terminal colors. */
 static int editorSyntaxToColor(int hl) {
     switch(hl) {
-        case HL_COMMENT:
-        case HL_MLCOMMENT: return 31;   /* normal red foreground */
-        case HL_KEYWORD1: return 33;    /* yellow */
-        case HL_KEYWORD2: return 32;    /* green */
-        case HL_STRING: return 95;      /* bright magenta foreground */
-        case HL_NUMBER: return 35;      /* magenta */
-        case HL_MATCH: return 34;       /* blu */
-        default: return 37;             /* white */
+    case HL_COMMENT:
+    case HL_MLCOMMENT: return 36;     /* cyan */
+    case HL_KEYWORD1: return 33;    /* yellow */
+    case HL_KEYWORD2: return 32;    /* green */
+    case HL_STRING: return 35;      /* magenta */
+    case HL_NUMBER: return 31;      /* red */
+    case HL_MATCH: return 34;      /* blu */
+    default: return 37;             /* white */
     }
 }
 
 /* Select the syntax highlight scheme depending on the filename,
  * setting it in the global state E.syntax. */
 static void editorSelectSyntaxHighlight(char *filename) {
-    for (size_t j = 0; j < sizeof(SYNTAX_HIGHLIGHT_DATABASE) / sizeof(SYNTAX_HIGHLIGHT_DATABASE[0]); j++) {
-        struct editorSyntax *s = SYNTAX_HIGHLIGHT_DATABASE + j;
-        int i = 0;
-        while (s->filematch[i]) {
-            char *p = strstr(filename, s->filematch[i]);
-            if (p && (s->filematch[i][0] != '.' || p[strlen(s->filematch[i])] == '\0')) {
-                E.syntax = s;
-                return;
+    for (unsigned int j = 0; j < HLDB_ENTRIES; j++) {
+        struct editorSyntax *s = HLDB+j;
+        unsigned int i = 0;
+        while(s->filematch[i]) {
+            char *p;
+            int patlen = strlen(s->filematch[i]);
+            if ((p = strstr(filename,s->filematch[i])) != NULL) {
+                if (s->filematch[i][0] != '.' || p[patlen] == '\0') {
+                    E.syntax = s;
+                    return;
+                }
             }
-            i += 1;
+            i++;
         }
     }
-}
-
-void clearScreen() //define the function to clear the screen after exiting the editor
-{
-    const char *CLEAR_SCREEN_ANSI = "\x1b[2J\x1b[H";
-    write(STDOUT_FILENO, CLEAR_SCREEN_ANSI, 7);
 }
 
 /* ======================= Editor rows implementation ======================= */
@@ -602,7 +608,7 @@ static void editorUpdateRow(erow *row) {
 
    /* Create a version of the row we can directly print on the screen,
      * respecting tabs, substituting non printable characters with '?'. */
-    free(row->render);
+    ki_free(row->render);
     for (j = 0; j < row->size; j++)
         if (row->chars[j] == TAB) tabs++;
 
@@ -610,10 +616,11 @@ static void editorUpdateRow(erow *row) {
         (unsigned long long) row->size + tabs*8 + nonprint*9 + 1;
     if (allocsize > UINT32_MAX) {
         printf("Some line of the edited file is too long for kilo\n");
-        allocsize = UINT32_MAX;
+        //exit(1);
+        return;
     }
 
-    row->render = malloc(allocsize);
+    row->render = ki_malloc(row->size + tabs*8 + nonprint*9 + 1);
     idx = 0;
     for (j = 0; j < row->size; j++) {
         if (row->chars[j] == TAB) {
@@ -634,13 +641,13 @@ static void editorUpdateRow(erow *row) {
  * if required. */
 static void editorInsertRow(int at, char *s, size_t len) {
     if (at > E.numrows) return;
-    E.row = realloc(E.row,sizeof(erow)*(E.numrows+1));
+    E.row = ki_realloc(E.row,sizeof(erow)*(E.numrows+1));
     if (at != E.numrows) {
         memmove(E.row+at+1,E.row+at,sizeof(E.row[0])*(E.numrows-at));
         for (int j = at+1; j <= E.numrows; j++) E.row[j].idx++;
     }
     E.row[at].size = len;
-    E.row[at].chars = malloc(len+1);
+    E.row[at].chars = ki_malloc(len+1);
     memcpy(E.row[at].chars,s,len+1);
     E.row[at].hl = NULL;
     E.row[at].hl_oc = 0;
@@ -653,10 +660,10 @@ static void editorInsertRow(int at, char *s, size_t len) {
 }
 
 /* Free row's heap allocated stuff. */
-void editorFreeRow(erow *row) {
-    free(row->render);
-    free(row->chars);
-    free(row->hl);
+static void editorFreeRow(erow *row) {
+    ki_free(row->render);
+    ki_free(row->chars);
+    ki_free(row->hl);
 }
 
 /* Remove the row at the specified position, shifting the remainign on the
@@ -688,7 +695,7 @@ static char *editorRowsToString(int *buflen) {
     *buflen = totlen;
     totlen++; /* Also make space for nulterm */
 
-    p = buf = malloc(totlen);
+    p = buf = ki_malloc(totlen);
     for (j = 0; j < E.numrows; j++) {
         memcpy(p,E.row[j].chars,E.row[j].size);
         p += E.row[j].size;
@@ -707,14 +714,14 @@ static void editorRowInsertChar(erow *row, int at, int c) {
          * current length by more than a single character. */
         int padlen = at-row->size;
         /* In the next line +2 means: new char and null term. */
-        row->chars = realloc(row->chars,row->size+padlen+2);
+        row->chars = ki_realloc(row->chars,row->size+padlen+2);
         memset(row->chars+row->size,' ',padlen);
         row->chars[row->size+padlen+1] = '\0';
         row->size += padlen+1;
     } else {
         /* If we are in the middle of the string just make space for 1 new
          * char plus the (already existing) null term. */
-        row->chars = realloc(row->chars,row->size+2);
+        row->chars = ki_realloc(row->chars,row->size+2);
         memmove(row->chars+at+1,row->chars+at,row->size-at+1);
         row->size++;
     }
@@ -725,7 +732,7 @@ static void editorRowInsertChar(erow *row, int at, int c) {
 
 /* Append the string 's' at the end of a row */
 static void editorRowAppendString(erow *row, char *s, size_t len) {
-    row->chars = realloc(row->chars,row->size+len+1);
+    row->chars = ki_realloc(row->chars,row->size+len+1);
     memcpy(row->chars+row->size,s,len);
     row->size += len;
     row->chars[row->size] = '\0';
@@ -836,22 +843,22 @@ static void editorDelChar() {
 }
 
 /* Load the specified program in the editor memory and returns 0 on success
- * or 1 on error. */
+ * or -1 on error. */
 static int editorOpen(char *filename) {
     FILE *fp;
 
     E.dirty = 0;
-    free(E.filename);
+    ki_free(E.filename);
     size_t fnlen = strlen(filename)+1;
-    E.filename = malloc(fnlen);
+    E.filename = ki_malloc(fnlen);
     memcpy(E.filename,filename,fnlen);
 
     /*If the file did not exist, than creat it*/
-    fp = fopen(filename,"r+");
+    fp = fopen(filename,"r");
     if (!fp) {
         fp = fopen(filename,"w+");
         if(!fp){
-            return 1;
+            return -1;
         }
     }
 
@@ -882,13 +889,13 @@ static int editorSave(void) {
     if (write(fd,buf,len) != len) goto writeerr;
 
     close(fd);
-    free(buf);
+    ki_free(buf);
     E.dirty = 0;
     editorSetStatusMessage("%d bytes written on disk", len);
     return 0;
 
 writeerr:
-    free(buf);
+    ki_free(buf);
     if (fd != -1) close(fd);
     editorSetStatusMessage("Can't save! I/O error: %s",strerror(errno));
     return 1;
@@ -908,7 +915,7 @@ struct abuf {
 #define ABUF_INIT {NULL,0}
 
 static void abAppend(struct abuf *ab, const char *s, int len) {
-    char *new = realloc(ab->b,ab->len+len);
+    char *new = ki_realloc(ab->b,ab->len+len);
 
     if (new == NULL) return;
     memcpy(new+ab->len,s,len);
@@ -917,7 +924,7 @@ static void abAppend(struct abuf *ab, const char *s, int len) {
 }
 
 static void abFree(struct abuf *ab) {
-    free(ab->b);
+    ki_free(ab->b);
 }
 
 /* This function writes the whole screen using VT100 escape characters
@@ -929,7 +936,6 @@ static void editorRefreshScreen(void) {
     struct abuf ab = ABUF_INIT;
 
     abAppend(&ab,"\x1b[?25l",6); /* Hide cursor. */
-    abAppend(&ab,"\x1b[2J",4); /* clear screen */
     abAppend(&ab,"\x1b[H",3); /* Go home. */
     for (y = 0; y < E.screenrows; y++) {
         int filerow = E.rowoff+y;
@@ -1066,7 +1072,7 @@ static void editorFind(int fd) {
 #define FIND_RESTORE_HL do { \
     if (saved_hl) { \
         memcpy(E.row[saved_hl_line].hl,saved_hl, E.row[saved_hl_line].rsize); \
-        free(saved_hl); \
+        ki_free(saved_hl); \
         saved_hl = NULL; \
     } \
 } while (0)
@@ -1076,8 +1082,7 @@ static void editorFind(int fd) {
     int saved_coloff = E.coloff, saved_rowoff = E.rowoff;
 
     while(1) {
-        editorSetStatusMessage(
-            "Search: %s (Use ESC/Arrows/Enter/TAB)", query);
+        editorSetStatusMessage("Search: %s (Use ESC/Arrows/Enter/TAB)", query);
         editorRefreshScreen();
 
         int c = editorReadKey(fd);
@@ -1085,14 +1090,14 @@ static void editorFind(int fd) {
             if (qlen != 0) query[--qlen] = '\0';
             last_match = -1;
         } else if (c == ESC || c == ENTER) { /*TODO:确认是由于ESC没有成功识别导致键入ESC后假死*/
-            if(c == ESC){
+            if (c == ESC) {
                 E.cx = saved_cx; E.cy = saved_cy;
                 E.coloff = saved_coloff; E.rowoff = saved_rowoff;
             }
             FIND_RESTORE_HL;
             editorSetStatusMessage("");
             if (saved_hl) {
-                free(saved_hl);
+                ki_free(saved_hl);
                 saved_hl=NULL;
             }
             return;
@@ -1135,7 +1140,7 @@ static void editorFind(int fd) {
                 last_match = current;
                 if (row->hl) {
                     saved_hl_line = current;
-                    saved_hl = malloc(row->rsize);
+                    saved_hl = ki_malloc(row->rsize);
                     memcpy(saved_hl,row->hl,row->rsize);
                     memset(row->hl+match_offset,HL_MATCH,qlen);
                 }
@@ -1232,9 +1237,9 @@ static void editorMoveCursor(int key) {
 
 /* Process events arriving from the standard input, which is, the user
  * is typing stuff on the terminal. */
-/*return 0: Crtl+Q    1:normal exit*/
 #define KILO_QUIT_TIMES 3
-static unsigned int editorProcessKeypress(int fd) {
+//-1 exit ki; 0 normal
+static int editorProcessKeypress(int fd) {
     /* When the file is modified, requires Ctrl-q to be pressed N times
      * before actually quitting. */
     static int quit_times = KILO_QUIT_TIMES;
@@ -1254,12 +1259,9 @@ static unsigned int editorProcessKeypress(int fd) {
             editorSetStatusMessage("WARNING!!! File has unsaved changes. "
                 "Press Ctrl-Q %d more times to quit.", quit_times);
             quit_times--;
-            if(quit_times){
-                return 1;
-            }
+            return 0;
         }
-        clearScreen();
-       return 0;
+        return -1;
     case CTRL_S:        /* Ctrl-s */
         editorSave();
         break;
@@ -1303,28 +1305,21 @@ static unsigned int editorProcessKeypress(int fd) {
     }
 
     quit_times = KILO_QUIT_TIMES; /* Reset it to the original value. */
-    return 1;
+    return 0;
 }
 
-#ifdef ENABLE_FEATURE_KILO_USE_SIGNALS
-static void updateWindowSize(void) {
+static int updateWindowSize(void) {
     if (getWindowSize(STDIN_FILENO,STDOUT_FILENO,
                       &E.screenrows,&E.screencols) == -1) {
         perror("Unable to query the screen for size (columns / rows)");
-        exit(1);
+        return -1; // failure
     }
     E.screenrows -= 2; /* Get room for status bar. */
+    return 0;
 }
 
-static void handleSigWinCh(int unused __attribute__((unused))) {
-    updateWindowSize();
-    if (E.cy > E.screenrows) E.cy = E.screenrows - 1;
-    if (E.cx > E.screencols) E.cx = E.screencols - 1;
-    editorRefreshScreen();
-}
-#endif
-
-static void initEditor(void) {
+// 0 success -1 failure
+static int initEditor(void) {
     E.cx = 0;
     E.cy = 0;
     E.rowoff = 0;
@@ -1334,57 +1329,39 @@ static void initEditor(void) {
     E.dirty = 0;
     E.filename = NULL;
     E.syntax = NULL;
-#ifdef ENABLE_FEATURE_KILO_USE_SIGNALS
-    updateWindowSize();
-    signal(SIGWINCH, handleSigWinCh);
-#else
-// The terminal is made up of 'rows' line of 'columns' columns.
-// classically this would be 24 x 80.
-//  screen coordinates
-//  0,0     ...     0,79
-//  1,0     ...     1,79
-//  .       ...     .
-//  .       ...     .
-//  22,0    ...     22,79
-//  23,0    ...     23,79   <- status line
-    E.screencols = 80;
-    E.screenrows = 24;
-#endif
+    return updateWindowSize();
 }
 
-/* main */
-int ki_main(int argc, char **argv) {
+static int ki_main(int argc, char **argv) {
     if (argc != 2) {
-        fprintf(stderr,"Usage: kilo <filename>\n");
-        return 0;
+        fprintf(stderr,"Usage: ki <filename>\n");
+        return -1;
     }
 
-    initEditor();
+    if(ki_mem_init() == 0)
+        return -1;
+
+    if(initEditor() < 0)
+        return -1;
+
+    printf("\033[?1049h"); /* Save cursor, use alternate screen buffer, clear screen */
+
     editorSelectSyntaxHighlight(argv[1]);
-    if(editorOpen(argv[1])){
-        return 0;
-    }
 
-    clearScreen();
+    if(editorOpen(argv[1]) < 0)
+        return -1;
+
     enableRawMode(STDIN_FILENO);
-    editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find");
-
+    editorSetStatusMessage(
+        "HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find");
     while(1) {
         editorRefreshScreen();
-        if(editorProcessKeypress(STDIN_FILENO) == 0){ /* quit ? */
+        if(editorProcessKeypress(STDIN_FILENO) < 0) /* exit ki or not */
             break;
-        }
     }
 
+    ki_mem_release();
+    printf("\033[?1049l"); /* Use normal screen buffer, restore cursor */
     return 0;
 }
-#ifdef MSH_CMD_EXPORT_ALIAS
 MSH_CMD_EXPORT_ALIAS(ki_main, ki, a small text editor with syntax highlight and search);
-#endif
-
-#ifdef __linux__
-int main (int argc, char **argv)
-{
-    return ki_main(argc,argv);
-}
-#endif
