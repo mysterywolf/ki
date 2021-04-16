@@ -3,7 +3,7 @@ Ki
 
 Ki is a small text editor in less than 1K lines of code (counted with cloc).
 
-ki是一个带有语法高亮的终端编辑器，支持C/C++ Python Javascript Go语言语法高亮。原项目：https://github.com/antirez/kilo
+ki是一个带有语法高亮的终端编辑器，支持C/C++语法高亮。原项目：https://github.com/antirez/kilo
 
 A screencast is available here/演示视频: https://asciinema.org/a/90r2i9bq8po03nazhqtsifksb
 
