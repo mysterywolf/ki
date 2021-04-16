@@ -21,7 +21,7 @@ Keys/快捷键 :
 
      RT-Thread online packages  --->
         miscellaneous packages  --->
-            [*] vi: A screen-oriented text editor
+            [*] ki: a small text editor in less than 1K lines of code
 此外，程序中用到了time函数，需要开启RTC设备框架。
 
 
