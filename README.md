@@ -32,4 +32,4 @@ Meco Man
 
 jiantingman@foxmail.com
 
-https://github.com/mysterywolf/kilo
+https://github.com/mysterywolf/ki
