@@ -59,6 +59,15 @@
 
 #include <mem_sandbox.h>
 
+#define DBG_TAG "ki"
+#define DBG_LVL DBG_INFO
+#include <rtdbg.h>
+
+#include <rtconfig.h>
+#ifndef KI_SANDBOX_SIZE_KB
+#define KI_SANDBOX_SIZE_KB   10 /* KB */
+#endif
+
 /* Syntax highlight types */
 #define HL_NORMAL 0
 #define HL_NONPRINT 1
@@ -143,13 +152,15 @@ enum KEY_ACTION{
     PAGE_DOWN
 };
 
-static mem_sandbox_t vi_sandbox = RT_NULL;
+static mem_sandbox_t ki_sandbox = RT_NULL;
+static const char *ki_outof_momory_warning = "ki sandbox runs out of memory, please enlarge KI_SANDBOX_SIZE_KB";
 
 static unsigned char ki_mem_init(void)
 {
-    vi_sandbox = mem_sandbox_create(1024 *10); /* sandbox size is 10KB */
-    if(vi_sandbox == RT_NULL)
+    ki_sandbox = mem_sandbox_create(KI_SANDBOX_SIZE_KB * 1024);
+    if(ki_sandbox == RT_NULL)
     {
+        LOG_E("ki sandbox create error");
         return 0;
     }
     else
@@ -160,22 +171,38 @@ static unsigned char ki_mem_init(void)
 
 static void ki_mem_release(void)
 {
-    mem_sandbox_delete(vi_sandbox);
+    mem_sandbox_delete(ki_sandbox);
 }
 
 static void *ki_malloc(rt_size_t size)
 {
-    return mem_sandbox_malloc(vi_sandbox, size);
+    void * p;
+    p = mem_sandbox_malloc(ki_sandbox, size);
+    if(p == RT_NULL)
+    {
+        LOG_E(ki_outof_momory_warning);
+        RT_ASSERT(p != RT_NULL);
+        return RT_NULL;
+    }
+    return p;
 }
 
 static void *ki_realloc(void *rmem, rt_size_t newsize)
 {
-    return mem_sandbox_realloc(vi_sandbox, rmem, newsize);
+    void *p;
+    p = mem_sandbox_realloc(ki_sandbox, rmem, newsize);
+    if(p == RT_NULL && newsize != 0)
+    {
+        LOG_E(ki_outof_momory_warning);
+        RT_ASSERT(p != RT_NULL);
+        return RT_NULL;
+    }
+    return p;
 }
 
 static void ki_free(void *ptr)
 {
-    mem_sandbox_free(vi_sandbox, ptr);
+    mem_sandbox_free(ki_sandbox, ptr);
 }
 
 
