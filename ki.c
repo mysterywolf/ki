@@ -41,11 +41,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define KILO_VERSION "0.0.1"
+#define KILO_VERSION "0.0.2"
 
+#include <rtthread.h>
 #include <termios.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <ctype.h>
@@ -53,18 +55,17 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <sys/errno.h>
 #include <unistd.h>
 #include <stdarg.h>
 #include <fcntl.h>
 #include <getline.h>
-
 #include <mem_sandbox.h>
 
 #define DBG_TAG "ki"
 #define DBG_LVL DBG_INFO
 #include <rtdbg.h>
 
-#include <rtconfig.h>
 #ifndef KI_SANDBOX_SIZE_KB
 #define KI_SANDBOX_SIZE_KB   10 /* KB */
 #endif
@@ -288,7 +289,7 @@ static int enableRawMode(int fd) {
     struct termios raw;
 
     if (E.rawmode) return 0; /* Already enabled. */
-    if (!isatty(STDIN_FILENO)) goto fatal;
+    //if (!isatty(STDIN_FILENO)) goto fatal;
     atexit(editorAtExit);
     if (tcgetattr(fd,&orig_termios) == -1) goto fatal;
 
