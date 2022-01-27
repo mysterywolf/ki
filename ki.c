@@ -249,8 +249,8 @@ static const char *C_HL_keywords[] = {
     "typeid","typename","virtual","xor","xor_eq",
 
     /* C types */
-        "int|","long|","double|","float|","char|","unsigned|","signed|",
-        "void|","short|","auto|","const|","bool|",NULL
+    "int|","long|","double|","float|","char|","unsigned|","signed|",
+    "void|","short|","auto|","const|","bool|",NULL
 };
 
 /* Here we define an array of syntax highlights by extensions, keywords,
